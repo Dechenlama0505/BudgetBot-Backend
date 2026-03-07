@@ -43,6 +43,11 @@ const userSchema = new mongoose.Schema(
       default: null, // Optional field for monthly income
       min: [0, "Monthly income cannot be negative"],
     },
+    budgetCategories: {
+      type: [String],
+      default: [],
+      // Array of category names/IDs the user has added to "Set Your Budget" on home
+    },
     createdAt: {
       type: Date,
       default: Date.now,
@@ -50,6 +55,8 @@ const userSchema = new mongoose.Schema(
     lastLogin: {
       type: Date,
     },
+    resetPasswordToken: { type: String, select: false },
+    resetPasswordExpire: { type: Date, select: false },
   },
   {
     timestamps: true,

@@ -1,4 +1,7 @@
+const crypto = require("crypto");
 const User = require("../models/User");
+const { sendPasswordResetEmail } = require("../utils/sendEmail");
+const Category = require("../models/Category");
 const generateToken = require("../utils/generateToken");
 const fs = require("fs");
 const path = require("path");
@@ -44,6 +47,7 @@ const signup = async (req, res) => {
             email: user.email,
             profilePicture: user.profilePicture,
             monthlyIncome: user.monthlyIncome,
+            budgetCategories: user.budgetCategories || [],
             createdAt: user.createdAt,
           },
           token,
@@ -140,6 +144,7 @@ const login = async (req, res) => {
           email: user.email,
           profilePicture: user.profilePicture,
           monthlyIncome: user.monthlyIncome,
+          budgetCategories: user.budgetCategories || [],
           lastLogin: user.lastLogin,
         },
         token,
@@ -170,6 +175,7 @@ const getMe = async (req, res) => {
           email: user.email,
           profilePicture: user.profilePicture,
           monthlyIncome: user.monthlyIncome,
+          budgetCategories: user.budgetCategories || [],
           createdAt: user.createdAt,
           lastLogin: user.lastLogin,
         },
@@ -277,6 +283,7 @@ const updateProfile = async (req, res) => {
           email: user.email,
           profilePicture: user.profilePicture,
           monthlyIncome: user.monthlyIncome,
+          budgetCategories: user.budgetCategories || [],
           createdAt: user.createdAt,
           lastLogin: user.lastLogin,
         },
@@ -345,6 +352,7 @@ const deleteProfilePicture = async (req, res) => {
           email: user.email,
           profilePicture: user.profilePicture,
           monthlyIncome: user.monthlyIncome,
+          budgetCategories: user.budgetCategories || [],
           createdAt: user.createdAt,
           lastLogin: user.lastLogin,
         },
@@ -359,10 +367,227 @@ const deleteProfilePicture = async (req, res) => {
   }
 };
 
+// @desc    Update user's budget categories (add/remove for Set Your Budget)
+// @route   PUT /api/auth/budget-categories
+// @access  Private
+const updateBudgetCategories = async (req, res) => {
+  try {
+    const { budgetCategories } = req.body;
+    const user = await User.findById(req.user._id);
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    if (!Array.isArray(budgetCategories)) {
+      return res.status(400).json({
+        success: false,
+        message: "budgetCategories must be an array",
+      });
+    }
+
+    // Validate all category names exist in predefined categories
+    const validNames = await Category.find().distinct("name");
+    const invalid = budgetCategories.filter((c) => !validNames.includes(c));
+    if (invalid.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid category names: " + invalid.join(", "),
+      });
+    }
+
+    user.budgetCategories = budgetCategories;
+    await user.save();
+
+    res.status(200).json({
+      success: true,
+      message: "Budget categories updated successfully",
+      data: {
+        user: {
+          id: user._id,
+          fullName: user.fullName,
+          email: user.email,
+          profilePicture: user.profilePicture,
+          monthlyIncome: user.monthlyIncome,
+          budgetCategories: user.budgetCategories,
+          createdAt: user.createdAt,
+          lastLogin: user.lastLogin,
+        },
+      },
+    });
+  } catch (error) {
+    console.error("Update budget categories error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Server error occurred while updating budget categories",
+    });
+  }
+};
+
+// @desc    Change password (authenticated user)
+// @route   PUT /api/auth/change-password
+// @access  Private
+const changePassword = async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    const user = await User.findById(req.user._id).select("+password");
+
+    if (!user) {
+      return res.status(404).json({ success: false, message: "User not found" });
+    }
+
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({
+        success: false,
+        message: "Current password and new password are required",
+      });
+    }
+
+    const isMatch = await user.comparePassword(currentPassword);
+    if (!isMatch) {
+      return res.status(401).json({
+        success: false,
+        message: "Current password is incorrect",
+      });
+    }
+
+    if (newPassword.length < 8) {
+      return res.status(400).json({
+        success: false,
+        message: "New password must be at least 8 characters long",
+      });
+    }
+
+    user.password = newPassword;
+    await user.save({ validateBeforeSave: true });
+
+    res.status(200).json({
+      success: true,
+      message: "Password changed successfully",
+    });
+  } catch (error) {
+    console.error("Change password error:", error);
+    if (error.name === "ValidationError") {
+      const msg = error.errors?.password?.message || "Invalid new password";
+      return res.status(400).json({ success: false, message: msg });
+    }
+    res.status(500).json({
+      success: false,
+      message: "Server error occurred while changing password",
+    });
+  }
+};
+
+// @desc    Forgot password - generate reset token
+// @route   POST /api/auth/forgot-password
+// @access  Public
+const forgotPassword = async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email || !email.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: "Email is required",
+      });
+    }
+
+    const user = await User.findOne({ email: email.trim().toLowerCase() });
+    if (!user) {
+      console.log("[ForgotPassword] User not found for email:", email.trim(), "- no email sent");
+      return res.status(200).json({
+        success: true,
+        message: "If an account exists with this email, you will receive reset instructions.",
+      });
+    }
+
+    const resetToken = crypto.randomBytes(32).toString("hex");
+    user.resetPasswordToken = crypto.createHash("sha256").update(resetToken).digest("hex");
+    user.resetPasswordExpire = Date.now() + 10 * 60 * 1000; // 10 minutes
+    await user.save({ validateBeforeSave: false });
+
+    const frontendBase = process.env.CLIENT_URL || "http://localhost:3000";
+    const resetLink = `${frontendBase}/reset-password?token=${resetToken}&email=${encodeURIComponent(user.email)}`;
+
+    console.log("[ForgotPassword] Sending reset email to:", user.email);
+    await sendPasswordResetEmail(user.email, resetLink);
+    console.log("[ForgotPassword] Password reset email sent successfully to:", user.email);
+
+    res.status(200).json({
+      success: true,
+      message: "If an account exists with this email, you will receive reset instructions.",
+    });
+  } catch (error) {
+    console.error("Forgot password error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Server error occurred",
+    });
+  }
+};
+
+// @desc    Reset password with token
+// @route   POST /api/auth/reset-password
+// @access  Public
+const resetPassword = async (req, res) => {
+  try {
+    const { email, token, newPassword } = req.body;
+    if (!email || !token || !newPassword) {
+      return res.status(400).json({
+        success: false,
+        message: "Email, reset token, and new password are required",
+      });
+    }
+
+    const hashedToken = crypto.createHash("sha256").update(token).digest("hex");
+    const user = await User.findOne({
+      email: email.trim().toLowerCase(),
+      resetPasswordToken: hashedToken,
+      resetPasswordExpire: { $gt: Date.now() },
+    }).select("+password +resetPasswordToken +resetPasswordExpire");
+
+    if (!user) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid or expired reset token",
+      });
+    }
+
+    if (newPassword.length < 8) {
+      return res.status(400).json({
+        success: false,
+        message: "New password must be at least 8 characters long",
+      });
+    }
+
+    user.password = newPassword;
+    user.resetPasswordToken = undefined;
+    user.resetPasswordExpire = undefined;
+    await user.save({ validateBeforeSave: true });
+
+    res.status(200).json({
+      success: true,
+      message: "Password reset successfully. You can now sign in.",
+    });
+  } catch (error) {
+    console.error("Reset password error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Server error occurred while resetting password",
+    });
+  }
+};
+
 module.exports = {
   signup,
   login,
   getMe,
   updateProfile,
   deleteProfilePicture,
+  updateBudgetCategories,
+  changePassword,
+  forgotPassword,
+  resetPassword,
 };
