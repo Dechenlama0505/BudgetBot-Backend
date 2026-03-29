@@ -15,6 +15,7 @@ const userSchema = new mongoose.Schema(
         message: "Full name can only contain letters and spaces",
       },
     },
+
     email: {
       type: String,
       required: [true, "Email is required"],
@@ -28,33 +29,53 @@ const userSchema = new mongoose.Schema(
         message: "Email must be a valid Gmail address ending with @gmail.com",
       },
     },
+
     password: {
       type: String,
       required: [true, "Password is required"],
       minlength: [8, "Password must be at least 8 characters long"],
-      select: false, // Don't return password by default in queries
+      select: false,
     },
+
+    // 🔥 NEW FIELD: ROLE
+    role: {
+      type: String,
+      enum: ["user", "admin", "superadmin"],
+      default: "user",
+    },
+
+    // 🔥 NEW FIELD: STATUS
+    status: {
+      type: String,
+      enum: ["active", "inactive", "pending"],
+      default: "active",
+    },
+
     profilePicture: {
       type: String,
-      default: null, // Optional field for profile picture path
+      default: null,
     },
+
     monthlyIncome: {
       type: Number,
-      default: null, // Optional field for monthly income
+      default: null,
       min: [0, "Monthly income cannot be negative"],
     },
+
     budgetCategories: {
       type: [String],
       default: [],
-      // Array of category names/IDs the user has added to "Set Your Budget" on home
     },
+
     createdAt: {
       type: Date,
       default: Date.now,
     },
+
     lastLogin: {
       type: Date,
     },
+
     resetPasswordToken: { type: String, select: false },
     resetPasswordExpire: { type: Date, select: false },
   },
@@ -65,7 +86,6 @@ const userSchema = new mongoose.Schema(
 
 // Hash password before saving
 userSchema.pre("save", async function (next) {
-  // Only hash the password if it has been modified (or is new)
   if (!this.isModified("password")) {
     return next();
   }
@@ -84,7 +104,7 @@ userSchema.methods.comparePassword = async function (enteredPassword) {
   return await bcrypt.compare(enteredPassword, this.password);
 };
 
-// Method to get user without sensitive data
+// Remove sensitive data
 userSchema.methods.toJSON = function () {
   const user = this.toObject();
   delete user.password;

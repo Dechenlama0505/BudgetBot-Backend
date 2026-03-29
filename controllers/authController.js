@@ -13,7 +13,6 @@ const signup = async (req, res) => {
   try {
     const { fullName, email, password } = req.body;
 
-    // Check if user already exists
     const userExists = await User.findOne({ email });
 
     if (userExists) {
@@ -26,15 +25,14 @@ const signup = async (req, res) => {
       });
     }
 
-    // Create user
     const user = await User.create({
       fullName,
       email,
       password,
+      role: "user",
     });
 
     if (user) {
-      // Generate token
       const token = generateToken(user._id);
 
       res.status(201).json({
@@ -49,6 +47,8 @@ const signup = async (req, res) => {
             monthlyIncome: user.monthlyIncome,
             budgetCategories: user.budgetCategories || [],
             createdAt: user.createdAt,
+            role: user.role,
+            status: user.status,
           },
           token,
         },
@@ -62,7 +62,6 @@ const signup = async (req, res) => {
   } catch (error) {
     console.error("Signup error:", error);
 
-    // Handle mongoose validation errors
     if (error.name === "ValidationError") {
       const errors = {};
       Object.keys(error.errors).forEach((key) => {
@@ -76,7 +75,6 @@ const signup = async (req, res) => {
       });
     }
 
-    // Handle duplicate key error
     if (error.code === 11000) {
       return res.status(400).json({
         success: false,
@@ -101,7 +99,6 @@ const login = async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    // Check if user exists and include password field
     const user = await User.findOne({ email }).select("+password");
 
     if (!user) {
@@ -114,7 +111,13 @@ const login = async (req, res) => {
       });
     }
 
-    // Check if password matches
+    if (user.status === "inactive") {
+      return res.status(403).json({
+        success: false,
+        message: "This account is inactive",
+      });
+    }
+
     const isPasswordMatch = await user.comparePassword(password);
 
     if (!isPasswordMatch) {
@@ -127,11 +130,9 @@ const login = async (req, res) => {
       });
     }
 
-    // Update last login
     user.lastLogin = Date.now();
     await user.save();
 
-    // Generate token
     const token = generateToken(user._id);
 
     res.status(200).json({
@@ -146,6 +147,8 @@ const login = async (req, res) => {
           monthlyIncome: user.monthlyIncome,
           budgetCategories: user.budgetCategories || [],
           lastLogin: user.lastLogin,
+          role: user.role,
+          status: user.status,
         },
         token,
       },
@@ -178,6 +181,8 @@ const getMe = async (req, res) => {
           budgetCategories: user.budgetCategories || [],
           createdAt: user.createdAt,
           lastLogin: user.lastLogin,
+          role: user.role,
+          status: user.status,
         },
       },
     });
@@ -205,7 +210,6 @@ const updateProfile = async (req, res) => {
       });
     }
 
-    // Validate fullName if provided
     if (fullName) {
       if (fullName.trim().length > 100) {
         return res.status(400).json({
@@ -230,10 +234,13 @@ const updateProfile = async (req, res) => {
       user.fullName = fullName.trim();
     }
 
-    // Validate monthlyIncome if provided
-    if (monthlyIncome !== undefined && monthlyIncome !== null && monthlyIncome !== "") {
+    if (
+      monthlyIncome !== undefined &&
+      monthlyIncome !== null &&
+      monthlyIncome !== ""
+    ) {
       const income = parseFloat(monthlyIncome);
-      
+
       if (isNaN(income)) {
         return res.status(400).json({
           success: false,
@@ -257,9 +264,7 @@ const updateProfile = async (req, res) => {
       user.monthlyIncome = income;
     }
 
-    // Handle profile picture upload
     if (req.file) {
-      // Delete old profile picture if exists
       if (user.profilePicture) {
         const oldImagePath = path.join(__dirname, "..", user.profilePicture);
         if (fs.existsSync(oldImagePath)) {
@@ -267,7 +272,6 @@ const updateProfile = async (req, res) => {
         }
       }
 
-      // Save new profile picture path (relative path for database)
       user.profilePicture = `/uploads/profiles/${req.file.filename}`;
     }
 
@@ -286,13 +290,14 @@ const updateProfile = async (req, res) => {
           budgetCategories: user.budgetCategories || [],
           createdAt: user.createdAt,
           lastLogin: user.lastLogin,
+          role: user.role,
+          status: user.status,
         },
       },
     });
   } catch (error) {
     console.error("Update profile error:", error);
 
-    // If there was an uploaded file and an error occurred, delete it
     if (req.file) {
       const filePath = path.join(
         __dirname,
@@ -332,13 +337,11 @@ const deleteProfilePicture = async (req, res) => {
       });
     }
 
-    // Delete the file
     const imagePath = path.join(__dirname, "..", user.profilePicture);
     if (fs.existsSync(imagePath)) {
       fs.unlinkSync(imagePath);
     }
 
-    // Update user
     user.profilePicture = null;
     await user.save();
 
@@ -355,6 +358,8 @@ const deleteProfilePicture = async (req, res) => {
           budgetCategories: user.budgetCategories || [],
           createdAt: user.createdAt,
           lastLogin: user.lastLogin,
+          role: user.role,
+          status: user.status,
         },
       },
     });
@@ -367,7 +372,7 @@ const deleteProfilePicture = async (req, res) => {
   }
 };
 
-// @desc    Update user's budget categories (add/remove for Set Your Budget)
+// @desc    Update user's budget categories
 // @route   PUT /api/auth/budget-categories
 // @access  Private
 const updateBudgetCategories = async (req, res) => {
@@ -389,9 +394,9 @@ const updateBudgetCategories = async (req, res) => {
       });
     }
 
-    // Validate all category names exist in predefined categories
     const validNames = await Category.find().distinct("name");
     const invalid = budgetCategories.filter((c) => !validNames.includes(c));
+
     if (invalid.length > 0) {
       return res.status(400).json({
         success: false,
@@ -415,6 +420,8 @@ const updateBudgetCategories = async (req, res) => {
           budgetCategories: user.budgetCategories,
           createdAt: user.createdAt,
           lastLogin: user.lastLogin,
+          role: user.role,
+          status: user.status,
         },
       },
     });
@@ -427,7 +434,7 @@ const updateBudgetCategories = async (req, res) => {
   }
 };
 
-// @desc    Change password (authenticated user)
+// @desc    Change password
 // @route   PUT /api/auth/change-password
 // @access  Private
 const changePassword = async (req, res) => {
@@ -436,7 +443,9 @@ const changePassword = async (req, res) => {
     const user = await User.findById(req.user._id).select("+password");
 
     if (!user) {
-      return res.status(404).json({ success: false, message: "User not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found" });
     }
 
     if (!currentPassword || !newPassword) {
@@ -481,12 +490,13 @@ const changePassword = async (req, res) => {
   }
 };
 
-// @desc    Forgot password - generate reset token
+// @desc    Forgot password
 // @route   POST /api/auth/forgot-password
 // @access  Public
 const forgotPassword = async (req, res) => {
   try {
     const { email } = req.body;
+
     if (!email || !email.trim()) {
       return res.status(400).json({
         success: false,
@@ -495,29 +505,44 @@ const forgotPassword = async (req, res) => {
     }
 
     const user = await User.findOne({ email: email.trim().toLowerCase() });
+
     if (!user) {
-      console.log("[ForgotPassword] User not found for email:", email.trim(), "- no email sent");
+      console.log(
+        "[ForgotPassword] User not found for email:",
+        email.trim(),
+        "- no email sent"
+      );
       return res.status(200).json({
         success: true,
-        message: "If an account exists with this email, you will receive reset instructions.",
+        message:
+          "If an account exists with this email, you will receive reset instructions.",
       });
     }
 
     const resetToken = crypto.randomBytes(32).toString("hex");
-    user.resetPasswordToken = crypto.createHash("sha256").update(resetToken).digest("hex");
-    user.resetPasswordExpire = Date.now() + 10 * 60 * 1000; // 10 minutes
+    user.resetPasswordToken = crypto
+      .createHash("sha256")
+      .update(resetToken)
+      .digest("hex");
+    user.resetPasswordExpire = Date.now() + 10 * 60 * 1000;
     await user.save({ validateBeforeSave: false });
 
     const frontendBase = process.env.CLIENT_URL || "http://localhost:3000";
-    const resetLink = `${frontendBase}/reset-password?token=${resetToken}&email=${encodeURIComponent(user.email)}`;
+    const resetLink = `${frontendBase}/reset-password?token=${resetToken}&email=${encodeURIComponent(
+      user.email
+    )}`;
 
     console.log("[ForgotPassword] Sending reset email to:", user.email);
     await sendPasswordResetEmail(user.email, resetLink);
-    console.log("[ForgotPassword] Password reset email sent successfully to:", user.email);
+    console.log(
+      "[ForgotPassword] Password reset email sent successfully to:",
+      user.email
+    );
 
     res.status(200).json({
       success: true,
-      message: "If an account exists with this email, you will receive reset instructions.",
+      message:
+        "If an account exists with this email, you will receive reset instructions.",
     });
   } catch (error) {
     console.error("Forgot password error:", error);
@@ -534,6 +559,7 @@ const forgotPassword = async (req, res) => {
 const resetPassword = async (req, res) => {
   try {
     const { email, token, newPassword } = req.body;
+
     if (!email || !token || !newPassword) {
       return res.status(400).json({
         success: false,
@@ -542,6 +568,7 @@ const resetPassword = async (req, res) => {
     }
 
     const hashedToken = crypto.createHash("sha256").update(token).digest("hex");
+
     const user = await User.findOne({
       email: email.trim().toLowerCase(),
       resetPasswordToken: hashedToken,
