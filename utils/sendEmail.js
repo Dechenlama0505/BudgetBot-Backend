@@ -68,7 +68,10 @@ If you didn't request this, you can safely ignore this email. Your password will
   };
 
   const result = await transporter.sendMail(mailOptions);
-  console.log("[sendEmail] Email sent successfully. MessageId:", result.messageId);
+  console.log(
+    "[sendEmail] Email sent successfully. MessageId:",
+    result.messageId,
+  );
 };
 
 module.exports = {

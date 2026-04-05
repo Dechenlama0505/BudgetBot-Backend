@@ -1,6 +1,7 @@
 const Expense = require("../models/Expense");
 const Budget = require("../models/Budget");
 const User = require("../models/User");
+const { buildPredictionsForMonth } = require("../utils/budgetPredictions");
 
 const getCurrentMonth = () => {
   const now = new Date();
@@ -149,4 +150,56 @@ const getIncomeVsSpending = async (req, res) => {
   }
 };
 
-module.exports = { getInsights, getIncomeVsSpending };
+// @desc    AI budget forecast per category (Home + Insight pages)
+// @route   GET /api/insights/predictions?month=YYYY-MM
+// @access  Private
+const getBudgetPredictions = async (req, res) => {
+  try {
+    const month = req.query.month || getCurrentMonth();
+    const budgetDoc = await Budget.findOne({
+      user: req.user._id,
+      month,
+    }).lean();
+
+    const total = Number(budgetDoc?.totalAmount);
+    if (!budgetDoc || !Number.isFinite(total) || total <= 0) {
+      return res.status(200).json({
+        success: true,
+        data: [],
+        budgetRequired: true,
+        message:
+          "Set your monthly budget on the home screen to unlock AI spending forecasts and alerts.",
+      });
+    }
+
+    const predictions = await buildPredictionsForMonth(req.user._id, month);
+
+    return res.status(200).json({
+      success: true,
+      data: predictions,
+      budgetRequired: false,
+    });
+  } catch (error) {
+    if (error.code === "NO_ALLOCATIONS") {
+      return res.status(200).json({
+        success: true,
+        data: [],
+        budgetRequired: true,
+        message:
+          "Split your budget across categories with the sliders, then save — you’ll see AI forecasts here.",
+      });
+    }
+
+    console.error("Get budget predictions error:", error.message);
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Failed to get budget predictions",
+    });
+  }
+};
+
+module.exports = {
+  getInsights,
+  getIncomeVsSpending,
+  getBudgetPredictions,
+};

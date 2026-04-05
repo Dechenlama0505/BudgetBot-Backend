@@ -13,10 +13,30 @@ const app = express();
 // Connect to database
 connectDB();
 
-// Middleware
+// CORS: browsers send Origin; Postman does not (so Postman can work while the app fails).
+const defaultDevOrigins = [
+  "http://localhost:3000",
+  "http://localhost:3001",
+  "http://localhost:3002",
+  "http://127.0.0.1:3000",
+  "http://127.0.0.1:3001",
+  "http://127.0.0.1:3002",
+];
+const allowedOrigins = new Set(defaultDevOrigins);
+if (process.env.CLIENT_URL) {
+  process.env.CLIENT_URL.split(",").forEach((o) => {
+    const trimmed = o.trim();
+    if (trimmed) allowedOrigins.add(trimmed);
+  });
+}
+
 app.use(
   cors({
-    origin: process.env.CLIENT_URL || "http://localhost:3000",
+    origin(origin, callback) {
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.has(origin)) return callback(null, true);
+      return callback(null, false);
+    },
     credentials: true,
   }),
 );

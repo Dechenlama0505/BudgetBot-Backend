@@ -1,23 +1,22 @@
-const mongoose = require('mongoose');
+const mongoose = require("mongoose");
 
 const connectDB = async () => {
   try {
-    if (!process.env.MONGODB_URI) {
-      throw new Error('MONGODB_URI is not defined');
+    const uri = process.env.MONGODB_URI;
+    if (!uri) {
+      throw new Error("MONGODB_URI is not defined");
     }
 
-    const mongoUrl = new URL(process.env.MONGODB_URI);
-    const dbName = mongoUrl.pathname.replace('/', '');
+    // Replica-set URIs list multiple hosts (host1:27017,host2:27017) — not valid for `new URL()`.
+    const pathBeforeQuery = uri.split("?")[0];
+    const dbNameMatch = pathBeforeQuery.match(/\/([^/]+)$/);
+    const dbName = dbNameMatch ? dbNameMatch[1] : "";
 
     if (!dbName) {
-      throw new Error('Database name is missing in MONGODB_URI');
+      throw new Error("Database name is missing in MONGODB_URI (add /YourDbName before ?)");
     }
 
-    const conn = await mongoose.connect(process.env.MONGODB_URI, {
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
-      dbName,
-    });
+    const conn = await mongoose.connect(uri);
 
     console.log(`MongoDB Connected: ${conn.connection.host}`);
     console.log(`MongoDB Database: ${conn.connection.name}`);
