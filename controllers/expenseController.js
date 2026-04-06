@@ -1,5 +1,16 @@
 const Expense = require("../models/Expense");
 const Category = require("../models/Category");
+const {
+  buildPredictionsForMonth,
+  pickBestPredictionForCategory,
+} = require("../utils/budgetPredictions");
+
+const getMonthFromDate = (value) => {
+  const date = new Date(value);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  return `${year}-${month}`;
+};
 
 // @desc    Add expense
 // @route   POST /api/expenses
@@ -46,17 +57,50 @@ const addExpense = async (req, res) => {
     });
 
     const populated = await Expense.findById(expense._id).lean();
+    const expenseData = {
+      _id: populated._id,
+      amount: populated.amount,
+      category: populated.category,
+      date: populated.date,
+      createdAt: populated.createdAt,
+    };
+
+    const predictionMonth = getMonthFromDate(populated.date);
+    let prediction = null;
+    let predictionMessage = null;
+    let predictionError = null;
+
+    try {
+      const predictions = await buildPredictionsForMonth(
+        req.user._id,
+        predictionMonth
+      );
+
+      prediction = pickBestPredictionForCategory(
+        predictions,
+        populated.category
+      );
+      predictionMessage = prediction?.message || null;
+    } catch (predictionIssue) {
+      if (
+        predictionIssue.code === "NO_BUDGET" ||
+        predictionIssue.code === "NO_ALLOCATIONS"
+      ) {
+        predictionMessage = predictionIssue.message;
+      } else {
+        console.error("Refresh prediction after expense error:", predictionIssue);
+        predictionError = "Unable to generate prediction at this time";
+      }
+    }
 
     res.status(201).json({
       success: true,
       message: "Expense added successfully",
-      data: {
-        _id: populated._id,
-        amount: populated.amount,
-        category: populated.category,
-        date: populated.date,
-        createdAt: populated.createdAt,
-      },
+      data: expenseData,
+      expense: expenseData,
+      prediction,
+      predictionMessage,
+      predictionError,
     });
   } catch (error) {
     console.error("Add expense error:", error);

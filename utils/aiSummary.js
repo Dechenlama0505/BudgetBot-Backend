@@ -30,7 +30,7 @@ const getStatusDetails = (category, overrunPercent) => {
   if (overrunPercent === 0) {
     return {
       status: "Safe",
-      message: "Your spending is currently within budget.",
+      message: `You are currently within your ${category} budget.`,
     };
   }
 
@@ -43,7 +43,7 @@ const getStatusDetails = (category, overrunPercent) => {
 
   return {
     status: "High Risk",
-    message: `Based on your current spending pattern, you may exceed your ${category} budget by ${overrunPercent}% this month.`,
+    message: `High Risk: You may exceed your ${category} budget by ${overrunPercent}% before month end.`,
   };
 };
 

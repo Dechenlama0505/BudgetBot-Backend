@@ -50,6 +50,10 @@ async function computeCategoryPrediction(item, month, currentMonthStr) {
     category: item.category,
     budget: item.budget,
     spentSoFar: item.spentSoFar,
+    transactions: item.transactions,
+    avgDailySpend: item.avgDailySpend,
+    dayOfMonth: dom,
+    daysInMonth: dim,
     predictedFinalSpend: roundedPrediction,
     overrunPercent,
     spendingProgress: item.spendingProgress,
@@ -121,7 +125,19 @@ async function buildPredictionsForMonth(userId, month) {
   return summaries;
 }
 
+function pickBestPredictionForCategory(predictions, category) {
+  if (!Array.isArray(predictions) || predictions.length === 0) {
+    return null;
+  }
+
+  return (
+    predictions.find((item) => item.category === category) ||
+    predictions[0]
+  );
+}
+
 module.exports = {
   buildPredictionsForMonth,
   daysInMonthFromYyyyMm,
+  pickBestPredictionForCategory,
 };
