@@ -33,7 +33,7 @@ const signup = async (req, res) => {
     });
 
     if (user) {
-      const token = generateToken(user._id);
+      const token = generateToken(user);
 
       res.status(201).json({
         success: true,
@@ -133,7 +133,7 @@ const login = async (req, res) => {
     user.lastLogin = Date.now();
     await user.save();
 
-    const token = generateToken(user._id);
+    const token = generateToken(user);
 
     res.status(200).json({
       success: true,

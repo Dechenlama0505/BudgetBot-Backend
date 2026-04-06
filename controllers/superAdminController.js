@@ -6,6 +6,7 @@ const formatUser = (user) => ({
   id: user._id,
   fullName: user.fullName,
   email: user.email,
+  role: user.role,
   status: user.status,
   createdAt: user.createdAt,
 });
@@ -21,6 +22,34 @@ const validateFullName = (fullName) => {
 
   if (!/^[A-Za-z\s]+$/.test(fullName.trim())) {
     return "Full name can only contain letters and spaces";
+  }
+
+  return null;
+};
+
+const validatePassword = (password) => {
+  if (typeof password !== "string" || !password.trim()) {
+    return "Password is required";
+  }
+
+  if (password.length < 8) {
+    return "Password must be at least 8 characters long";
+  }
+
+  if (!/[A-Z]/.test(password)) {
+    return "Password must contain at least one uppercase letter";
+  }
+
+  if (!/[a-z]/.test(password)) {
+    return "Password must contain at least one lowercase letter";
+  }
+
+  if (!/[0-9]/.test(password)) {
+    return "Password must contain at least one number";
+  }
+
+  if (!/[^A-Za-z0-9]/.test(password)) {
+    return "Password must contain at least one special character";
   }
 
   return null;
@@ -308,14 +337,6 @@ const createAdmin = async (req, res) => {
   try {
     const { fullName, email, password } = req.body;
 
-    const fullNameError = validateFullName(fullName);
-    if (fullNameError) {
-      return res.status(400).json({
-        success: false,
-        message: fullNameError,
-      });
-    }
-
     if (!email) {
       return res.status(400).json({
         success: false,
@@ -323,15 +344,28 @@ const createAdmin = async (req, res) => {
       });
     }
 
-    if (!password) {
+    const passwordError = validatePassword(password);
+    if (passwordError) {
       return res.status(400).json({
         success: false,
-        message: "Password is required",
+        message: passwordError,
+      });
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+    const adminFullName =
+      typeof fullName === "string" && fullName.trim() ? fullName.trim() : "Admin";
+
+    const fullNameError = validateFullName(adminFullName);
+    if (fullNameError) {
+      return res.status(400).json({
+        success: false,
+        message: fullNameError,
       });
     }
 
     const existingAdmin = await User.findOne({
-      email: email.trim().toLowerCase(),
+      email: normalizedEmail,
     });
 
     if (existingAdmin) {
@@ -342,8 +376,8 @@ const createAdmin = async (req, res) => {
     }
 
     const admin = await User.create({
-      fullName: fullName.trim(),
-      email: email.trim().toLowerCase(),
+      fullName: adminFullName,
+      email: normalizedEmail,
       password,
       role: "admin",
       status: "active",
