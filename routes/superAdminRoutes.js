@@ -13,9 +13,9 @@ const {
   updateAdmin,
   deleteAdmin,
 } = require("../controllers/superAdminController");
-const { protect, superAdminOnly } = require("../middleware/auth");
+const { protect, authorizeRoles } = require("../middleware/auth");
 
-router.use(protect, superAdminOnly);
+router.use(protect, authorizeRoles("superadmin"));
 
 router.get("/dashboard", getDashboardStats);
 router.get("/dashboard/stats", getTotalUsersCount);

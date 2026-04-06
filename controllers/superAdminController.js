@@ -64,6 +64,25 @@ const validateStatus = (status) => {
   return null;
 };
 
+const buildRecentActivity = (users) => {
+  return users.map((user) => {
+    const action =
+      new Date(user.updatedAt).getTime() > new Date(user.createdAt).getTime()
+        ? "updated"
+        : "created";
+
+    const label = user.role === "admin" ? "Admin" : "User";
+
+    return {
+      id: user._id,
+      name: user.fullName,
+      role: user.role,
+      message: `${label} '${user.fullName}' was ${action}`,
+      createdAt: user.updatedAt || user.createdAt,
+    };
+  });
+};
+
 // @desc    Get super admin dashboard stats
 // @route   GET /api/superadmin/dashboard
 // @access  Private/Super Admin
@@ -91,16 +110,41 @@ const getDashboardStats = async (req, res) => {
   }
 };
 
-// @desc    Get super admin dashboard user count
+// @desc    Get super admin dashboard stats
 // @route   GET /api/superadmin/dashboard/stats
 // @access  Private/Super Admin
 const getTotalUsersCount = async (req, res) => {
   try {
-    const totalUsers = await User.countDocuments({ role: "user" });
+    const [
+      totalUsers,
+      totalAdmins,
+      totalSuperAdmins,
+      recentUsers,
+      recentActivityUsers,
+    ] =
+      await Promise.all([
+        User.countDocuments({ role: "user" }),
+        User.countDocuments({ role: "admin" }),
+        User.countDocuments({ role: "superadmin" }),
+        User.find({ role: "user" })
+          .sort({ createdAt: -1, _id: -1 })
+          .limit(5)
+          .select("fullName email role status createdAt")
+          .lean(),
+        User.find({ role: { $in: ["user", "admin"] } })
+          .sort({ updatedAt: -1, createdAt: -1 })
+          .limit(5)
+          .select("fullName role createdAt updatedAt")
+          .lean(),
+      ]);
 
     res.status(200).json({
       success: true,
       totalUsers,
+      totalAdmins,
+      totalSuperAdmins,
+      recentUsers: recentUsers.map(formatUser),
+      recentActivity: buildRecentActivity(recentActivityUsers),
     });
   } catch (error) {
     console.error("Get total users count error:", error);
@@ -146,25 +190,9 @@ const getRecentActivity = async (req, res) => {
       .select("fullName role createdAt updatedAt")
       .lean();
 
-    const activity = users.map((user) => {
-      const action =
-        new Date(user.updatedAt).getTime() > new Date(user.createdAt).getTime()
-          ? "updated"
-          : "created";
-
-      const label = user.role === "admin" ? "Admin" : "User";
-
-      return {
-        name: user.fullName,
-        role: user.role,
-        message: `${label} '${user.fullName}' was ${action}`,
-        createdAt: user.updatedAt || user.createdAt,
-      };
-    });
-
     res.status(200).json({
       success: true,
-      data: activity,
+      data: buildRecentActivity(users),
     });
   } catch (error) {
     console.error("Get recent activity error:", error);
