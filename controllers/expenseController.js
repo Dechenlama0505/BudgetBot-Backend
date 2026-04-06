@@ -49,6 +49,7 @@ const addExpense = async (req, res) => {
 
     res.status(201).json({
       success: true,
+      message: "Expense added successfully",
       data: {
         _id: populated._id,
         amount: populated.amount,
