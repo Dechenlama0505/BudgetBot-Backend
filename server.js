@@ -52,6 +52,7 @@ app.use("/api/expenses", require("./routes/expenseRoutes"));
 app.use("/api/categories", require("./routes/categoryRoutes"));
 app.use("/api/budgets", require("./routes/budgetRoutes"));
 app.use("/api/insights", require("./routes/insightsRoutes"));
+app.use("/api/admin", require("./routes/adminRoutes"));
 app.use("/api/superadmin", require("./routes/superAdminRoutes"));
 app.use("/api/ai", require("./routes/aiRoutes"));
 

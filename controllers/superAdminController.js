@@ -61,6 +61,26 @@ const getDashboardStats = async (req, res) => {
   }
 };
 
+// @desc    Get super admin dashboard user count
+// @route   GET /api/superadmin/dashboard/stats
+// @access  Private/Super Admin
+const getTotalUsersCount = async (req, res) => {
+  try {
+    const totalUsers = await User.countDocuments({ role: "user" });
+
+    res.status(200).json({
+      success: true,
+      totalUsers,
+    });
+  } catch (error) {
+    console.error("Get total users count error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to get dashboard stats",
+    });
+  }
+};
+
 // @desc    Get recent members
 // @route   GET /api/superadmin/members/recent
 // @access  Private/Super Admin
@@ -451,6 +471,7 @@ const deleteAdmin = async (req, res) => {
 
 module.exports = {
   getDashboardStats,
+  getTotalUsersCount,
   getRecentMembers,
   getRecentActivity,
   getMembers,

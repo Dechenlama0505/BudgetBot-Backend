@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const {
   getDashboardStats,
+  getTotalUsersCount,
   getRecentMembers,
   getRecentActivity,
   getMembers,
@@ -17,6 +18,7 @@ const { protect, superAdminOnly } = require("../middleware/auth");
 router.use(protect, superAdminOnly);
 
 router.get("/dashboard", getDashboardStats);
+router.get("/dashboard/stats", getTotalUsersCount);
 router.get("/members/recent", getRecentMembers);
 router.get("/activity", getRecentActivity);
 
