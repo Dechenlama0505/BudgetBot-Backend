@@ -173,8 +173,42 @@ const getSummary = async (req, res) => {
   }
 };
 
+// @desc    Get expense history for current user
+// @route   GET /api/expenses/history
+// @access  Private
+// Query: limit=number (optional)
+const getExpenseHistory = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const parsedLimit = Number.parseInt(req.query.limit, 10);
+
+    const query = Expense.find({ user: userId })
+      .sort({ date: -1, createdAt: -1, _id: -1 })
+      .select("_id category amount date")
+      .lean();
+
+    if (Number.isInteger(parsedLimit) && parsedLimit > 0) {
+      query.limit(parsedLimit);
+    }
+
+    const expenses = await query;
+
+    res.status(200).json({
+      success: true,
+      expenses,
+    });
+  } catch (error) {
+    console.error("Get expense history error:", error);
+    res.status(500).json({
+      success: false,
+      message: error.message || "Failed to get expense history",
+    });
+  }
+};
+
 module.exports = {
   addExpense,
   getExpenses,
   getSummary,
+  getExpenseHistory,
 };
