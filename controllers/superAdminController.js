@@ -1,3 +1,4 @@
+const mongoose = require("mongoose");
 const User = require("../models/User");
 
 const allowedStatuses = ["active", "inactive", "pending"];
@@ -478,17 +479,32 @@ const updateAdmin = async (req, res) => {
 // @access  Private/Super Admin
 const deleteAdmin = async (req, res) => {
   try {
-    const admin = await User.findOneAndDelete({
-      _id: req.params.id,
-      role: "admin",
-    });
+    const { id } = req.params;
 
-    if (!admin) {
+    if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(404).json({
         success: false,
         message: "Admin not found",
       });
     }
+
+    const user = await User.findById(id);
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "Admin not found",
+      });
+    }
+
+    if (user.role !== "admin") {
+      return res.status(400).json({
+        success: false,
+        message: "Only admin accounts can be deleted from this route",
+      });
+    }
+
+    await user.deleteOne();
 
     res.status(200).json({
       success: true,
