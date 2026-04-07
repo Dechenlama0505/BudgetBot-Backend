@@ -64,6 +64,19 @@ const validateStatus = (status) => {
   return null;
 };
 
+const escapeRegex = (value = "") =>
+  value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const parsePositiveInt = (value, fallback) => {
+  const parsed = Number.parseInt(value, 10);
+
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    return fallback;
+  }
+
+  return parsed;
+};
+
 const buildRecentActivity = (users) => {
   return users.map((user) => {
     const action =
@@ -208,8 +221,37 @@ const getRecentActivity = async (req, res) => {
 // @access  Private/Super Admin
 const getMembers = async (req, res) => {
   try {
-    const members = await User.find({ role: "user" })
+    const { search = "", status } = req.query;
+    const page = parsePositiveInt(req.query.page, 1);
+    const limit = parsePositiveInt(req.query.limit, 10);
+    const filter = { role: "user" };
+
+    if (status && status !== "all") {
+      const statusError = validateStatus(status);
+      if (statusError) {
+        return res.status(400).json({
+          success: false,
+          message: statusError,
+        });
+      }
+
+      filter.status = status;
+    }
+
+    if (search.trim()) {
+      const pattern = new RegExp(escapeRegex(search.trim()), "i");
+      filter.$or = [{ fullName: pattern }, { email: pattern }];
+    }
+
+    const totalItems = await User.countDocuments(filter);
+    const totalPages = Math.max(1, Math.ceil(totalItems / limit));
+    const safePage = Math.min(page, totalPages);
+    const skip = (safePage - 1) * limit;
+
+    const members = await User.find(filter)
       .sort({ createdAt: -1, _id: -1 })
+      .skip(skip)
+      .limit(limit)
       .select("fullName email status role createdAt updatedAt")
       .lean();
 
@@ -225,6 +267,14 @@ const getMembers = async (req, res) => {
           createdAt: member.createdAt,
           updatedAt: member.updatedAt,
         })),
+        pagination: {
+          page: safePage,
+          limit,
+          totalItems,
+          totalPages,
+          hasNextPage: safePage < totalPages,
+          hasPrevPage: safePage > 1,
+        },
       },
     });
   } catch (error) {
