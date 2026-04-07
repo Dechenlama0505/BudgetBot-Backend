@@ -100,6 +100,34 @@ const validateMonthlyIncome = (monthlyIncome) => {
   return null;
 };
 
+const validatePassword = (password) => {
+  if (typeof password !== "string" || !password.trim()) {
+    return "Password is required";
+  }
+
+  if (password.length < 8) {
+    return "Password must be at least 8 characters long";
+  }
+
+  if (!/[A-Z]/.test(password)) {
+    return "Password must contain at least one uppercase letter";
+  }
+
+  if (!/[a-z]/.test(password)) {
+    return "Password must contain at least one lowercase letter";
+  }
+
+  if (!/[0-9]/.test(password)) {
+    return "Password must contain at least one number";
+  }
+
+  if (!/[^A-Za-z0-9]/.test(password)) {
+    return "Password must contain at least one special character";
+  }
+
+  return null;
+};
+
 const getMemberByIdOr404 = async (id) => {
   if (!mongoose.Types.ObjectId.isValid(id)) {
     return null;
@@ -126,6 +154,117 @@ const logActivity = async ({
     });
   } catch (error) {
     console.error("Admin activity log error:", error);
+  }
+};
+
+// @desc    Create member
+// @route   POST /api/admin/members
+// @access  Private/Admin or Superadmin
+const createMember = async (req, res) => {
+  try {
+    const { fullName, email, password, status, monthlyIncome } = req.body;
+
+    const fullNameError = validateFullName(fullName);
+    if (fullNameError) {
+      return res.status(400).json({
+        success: false,
+        message: fullNameError,
+      });
+    }
+
+    const emailError = validateEmail(email);
+    if (emailError) {
+      return res.status(400).json({
+        success: false,
+        message: emailError,
+      });
+    }
+
+    const passwordError = validatePassword(password);
+    if (passwordError) {
+      return res.status(400).json({
+        success: false,
+        message: passwordError,
+      });
+    }
+
+    if (status !== undefined) {
+      const statusError = validateStatus(status);
+      if (statusError) {
+        return res.status(400).json({
+          success: false,
+          message: statusError,
+        });
+      }
+    }
+
+    const incomeError = validateMonthlyIncome(monthlyIncome);
+    if (incomeError) {
+      return res.status(400).json({
+        success: false,
+        message: incomeError,
+      });
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+    const existingUser = await User.findOne({ email: normalizedEmail });
+
+    if (existingUser) {
+      return res.status(400).json({
+        success: false,
+        message: "User already exists with this email",
+      });
+    }
+
+    const member = await User.create({
+      fullName: fullName.trim(),
+      email: normalizedEmail,
+      password,
+      role: "user",
+      status: status || "active",
+      monthlyIncome:
+        monthlyIncome === "" || monthlyIncome === null || monthlyIncome === undefined
+          ? null
+          : Number(monthlyIncome),
+    });
+
+    await logActivity({
+      type: "member created",
+      action: "create",
+      message: `Member "${member.fullName}" was created`,
+      performedBy: req.user._id,
+      targetUser: member._id,
+    });
+
+    res.status(201).json({
+      success: true,
+      message: "Member created successfully",
+      data: {
+        member: formatMember(member),
+      },
+    });
+  } catch (error) {
+    console.error("Create member error:", error);
+
+    if (error.name === "ValidationError") {
+      const firstError = Object.values(error.errors)[0];
+      return res.status(400).json({
+        success: false,
+        message: firstError.message,
+      });
+    }
+
+    if (error.code === 11000) {
+      return res.status(400).json({
+        success: false,
+        message: "User already exists with this email",
+      });
+    }
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to create member",
+    });
   }
 };
 
@@ -519,6 +658,7 @@ const getRecentActivity = async (req, res) => {
 
 module.exports = {
   getDashboardStats,
+  createMember,
   getMembers,
   getMemberById,
   approveMember,

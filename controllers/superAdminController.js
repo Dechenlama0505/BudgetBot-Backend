@@ -359,6 +359,147 @@ const getAdmins = async (req, res) => {
   }
 };
 
+// @desc    Get all super admins
+// @route   GET /api/superadmin/superadmins
+// @access  Private/Super Admin
+const getSuperAdmins = async (req, res) => {
+  try {
+    const superAdmins = await User.find({ role: "superadmin" })
+      .sort({ createdAt: -1, _id: -1 })
+      .select("fullName email status role createdAt updatedAt")
+      .lean();
+
+    res.status(200).json({
+      success: true,
+      data: {
+        superAdmins: superAdmins.map((superAdmin) => ({
+          id: superAdmin._id,
+          fullName: superAdmin.fullName,
+          email: superAdmin.email,
+          status: superAdmin.status,
+          role: superAdmin.role,
+          createdAt: superAdmin.createdAt,
+          updatedAt: superAdmin.updatedAt,
+        })),
+      },
+    });
+  } catch (error) {
+    console.error("Get super admins error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to get super admins",
+    });
+  }
+};
+
+// @desc    Create member
+// @route   POST /api/superadmin/members
+// @access  Private/Super Admin
+const createMember = async (req, res) => {
+  try {
+    const { fullName, email, password, status, monthlyIncome } = req.body;
+
+    const fullNameError = validateFullName(fullName);
+    if (fullNameError) {
+      return res.status(400).json({
+        success: false,
+        message: fullNameError,
+      });
+    }
+
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: "Email is required",
+      });
+    }
+
+    const passwordError = validatePassword(password);
+    if (passwordError) {
+      return res.status(400).json({
+        success: false,
+        message: passwordError,
+      });
+    }
+
+    if (status !== undefined) {
+      const statusError = validateStatus(status);
+      if (statusError) {
+        return res.status(400).json({
+          success: false,
+          message: statusError,
+        });
+      }
+    }
+
+    if (
+      monthlyIncome !== undefined &&
+      monthlyIncome !== null &&
+      monthlyIncome !== "" &&
+      (Number.isNaN(Number(monthlyIncome)) || Number(monthlyIncome) < 0)
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: Number.isNaN(Number(monthlyIncome))
+          ? "Monthly income must be a valid number"
+          : "Monthly income cannot be negative",
+      });
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+    const existingUser = await User.findOne({
+      email: normalizedEmail,
+    });
+
+    if (existingUser) {
+      return res.status(400).json({
+        success: false,
+        message: "User already exists with this email",
+      });
+    }
+
+    const member = await User.create({
+      fullName: fullName.trim(),
+      email: normalizedEmail,
+      password,
+      role: "user",
+      status: status || "active",
+      monthlyIncome:
+        monthlyIncome === "" || monthlyIncome === null || monthlyIncome === undefined
+          ? null
+          : Number(monthlyIncome),
+    });
+
+    res.status(201).json({
+      success: true,
+      message: "Member created successfully",
+      data: { member: formatUser(member) },
+    });
+  } catch (error) {
+    console.error("Create member error:", error);
+
+    if (error.name === "ValidationError") {
+      const firstError = Object.values(error.errors)[0];
+      return res.status(400).json({
+        success: false,
+        message: firstError.message,
+      });
+    }
+
+    if (error.code === 11000) {
+      return res.status(400).json({
+        success: false,
+        message: "User already exists with this email",
+      });
+    }
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to create member",
+    });
+  }
+};
+
 // @desc    Create admin
 // @route   POST /api/superadmin/admins
 // @access  Private/Super Admin
@@ -438,6 +579,91 @@ const createAdmin = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Failed to create admin",
+    });
+  }
+};
+
+// @desc    Create super admin
+// @route   POST /api/superadmin/superadmins
+// @access  Private/Super Admin
+const createSuperAdmin = async (req, res) => {
+  try {
+    const { fullName, email, password } = req.body;
+
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: "Email is required",
+      });
+    }
+
+    const passwordError = validatePassword(password);
+    if (passwordError) {
+      return res.status(400).json({
+        success: false,
+        message: passwordError,
+      });
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+    const superAdminFullName =
+      typeof fullName === "string" && fullName.trim()
+        ? fullName.trim()
+        : "Super Admin";
+
+    const fullNameError = validateFullName(superAdminFullName);
+    if (fullNameError) {
+      return res.status(400).json({
+        success: false,
+        message: fullNameError,
+      });
+    }
+
+    const existingUser = await User.findOne({
+      email: normalizedEmail,
+    });
+
+    if (existingUser) {
+      return res.status(400).json({
+        success: false,
+        message: "User already exists with this email",
+      });
+    }
+
+    const superAdmin = await User.create({
+      fullName: superAdminFullName,
+      email: normalizedEmail,
+      password,
+      role: "superadmin",
+      status: "active",
+    });
+
+    res.status(201).json({
+      success: true,
+      message: "Super admin created successfully",
+      data: { superAdmin: formatUser(superAdmin) },
+    });
+  } catch (error) {
+    console.error("Create super admin error:", error);
+
+    if (error.name === "ValidationError") {
+      const firstError = Object.values(error.errors)[0];
+      return res.status(400).json({
+        success: false,
+        message: firstError.message,
+      });
+    }
+
+    if (error.code === 11000) {
+      return res.status(400).json({
+        success: false,
+        message: "User already exists with this email",
+      });
+    }
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to create super admin",
     });
   }
 };
@@ -547,16 +773,129 @@ const deleteAdmin = async (req, res) => {
   }
 };
 
+// @desc    Update super admin
+// @route   PUT /api/superadmin/superadmins/:id
+// @access  Private/Super Admin
+const updateSuperAdmin = async (req, res) => {
+  try {
+    const { fullName, status } = req.body;
+
+    if (fullName !== undefined) {
+      const fullNameError = validateFullName(fullName);
+      if (fullNameError) {
+        return res.status(400).json({
+          success: false,
+          message: fullNameError,
+        });
+      }
+    }
+
+    if (status !== undefined) {
+      const statusError = validateStatus(status);
+      if (statusError) {
+        return res.status(400).json({
+          success: false,
+          message: statusError,
+        });
+      }
+    }
+
+    const superAdmin = await User.findOne({
+      _id: req.params.id,
+      role: "superadmin",
+    });
+
+    if (!superAdmin) {
+      return res.status(404).json({
+        success: false,
+        message: "Super admin not found",
+      });
+    }
+
+    if (fullName !== undefined) {
+      superAdmin.fullName = fullName.trim();
+    }
+
+    if (status !== undefined) {
+      superAdmin.status = status;
+    }
+
+    await superAdmin.save();
+
+    res.status(200).json({
+      success: true,
+      message: "Super admin updated successfully",
+      data: { superAdmin: formatUser(superAdmin) },
+    });
+  } catch (error) {
+    console.error("Update super admin error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to update super admin",
+    });
+  }
+};
+
+// @desc    Delete super admin
+// @route   DELETE /api/superadmin/superadmins/:id
+// @access  Private/Super Admin
+const deleteSuperAdmin = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(404).json({
+        success: false,
+        message: "Super admin not found",
+      });
+    }
+
+    const user = await User.findById(id);
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "Super admin not found",
+      });
+    }
+
+    if (user.role !== "superadmin") {
+      return res.status(400).json({
+        success: false,
+        message: "Only superadmin accounts can be deleted from this route",
+      });
+    }
+
+    await user.deleteOne();
+
+    res.status(200).json({
+      success: true,
+      message: "Super admin deleted successfully",
+    });
+  } catch (error) {
+    console.error("Delete super admin error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to delete super admin",
+    });
+  }
+};
+
 module.exports = {
   getDashboardStats,
   getTotalUsersCount,
   getRecentMembers,
   getRecentActivity,
+  createMember,
   getMembers,
   updateMember,
   deleteMember,
   getAdmins,
+  getSuperAdmins,
   createAdmin,
+  createSuperAdmin,
   updateAdmin,
   deleteAdmin,
+  updateSuperAdmin,
+  deleteSuperAdmin,
 };
