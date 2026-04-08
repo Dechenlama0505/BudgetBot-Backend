@@ -22,8 +22,8 @@ const CATEGORIES = [
   { name: "Mobile Bill", color: "#7986CB", icon: "/mobilebill.png", order: 16 },
   { name: "Shopping", color: "#FF8A80", icon: "/shopping.png", order: 17 },
   { name: "Entertainment", color: "#F48FB1", icon: "/entertainment.png", order: 18 },
-  { name: "Home Bills", color: "#9575CD", icon: null, order: 19 },
-  { name: "Savings", color: "#81C784", icon: null, order: 20 },
+  { name: "Home Bills", color: "#9575CD", icon: "/homebills.png", order: 19 },
+  { name: "Savings", color: "#81C784", icon: "/saving.png", order: 20 },
   { name: "Others", color: "#FFD54F", icon: "/others.png", order: 21 },
 ];
 
