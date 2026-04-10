@@ -3,7 +3,7 @@ const {
   getCurrentMonth,
   getStatusDetails,
 } = require("../utils/aiSummary");
-const { predictFinalSpendGroq } = require("../utils/groqPredict");
+const { predictFinalSpendLocal } = require("../utils/localBudgetPredictor");
 const { buildPredictionsForMonth } = require("../utils/budgetPredictions");
 
 const predictSpending = async (req, res) => {
@@ -66,7 +66,8 @@ const predictSpending = async (req, res) => {
       0
     ).getDate();
 
-    const predictedFinalSpend = await predictFinalSpendGroq({
+    // TODO: Replace with local trained ML model prediction service or Flask API.
+    const predictedFinalSpend = await predictFinalSpendLocal({
       dayOfMonth: numericFields.day_of_month,
       daysInMonth: daysInMonth,
       category,

@@ -6,7 +6,7 @@ const {
   getStatusDetails,
   buildCategoryInputList,
 } = require("./aiSummary");
-const { predictFinalSpendGroq } = require("./groqPredict");
+const { predictFinalSpendLocal } = require("./localBudgetPredictor");
 
 function daysInMonthFromYyyyMm(month) {
   const [y, m] = month.split("-").map(Number);
@@ -30,7 +30,8 @@ async function computeCategoryPrediction(item, month, currentMonthStr) {
   } else if (item.spentSoFar <= 0 && item.transactions === 0) {
     predictedFinalSpend = 0;
   } else {
-    predictedFinalSpend = await predictFinalSpendGroq({
+    // TODO: Replace with local trained ML model prediction service.
+    predictedFinalSpend = await predictFinalSpendLocal({
       dayOfMonth: dom,
       daysInMonth: dim,
       category: item.category,
