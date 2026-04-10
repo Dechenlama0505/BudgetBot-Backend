@@ -1,8 +1,11 @@
 const Budget = require("../models/Budget");
 const {
+  buildHomeAlertSummary,
+  calculateOverrunPercent,
   getCurrentMonth,
   getStatusDetails,
 } = require("../utils/aiSummary");
+const { predictFinalSpendML } = require("../utils/mlPredictionService");
 const { predictFinalSpendLocal } = require("../utils/localBudgetPredictor");
 const { buildPredictionsForMonth } = require("../utils/budgetPredictions");
 
@@ -66,15 +69,31 @@ const predictSpending = async (req, res) => {
       0
     ).getDate();
 
-    // TODO: Replace with local trained ML model prediction service or Flask API.
-    const predictedFinalSpend = await predictFinalSpendLocal({
-      dayOfMonth: numericFields.day_of_month,
-      daysInMonth: daysInMonth,
-      category,
-      spentSoFar: numericFields.spent_so_far,
-      transactions: numericFields.transactions,
-      avgDailySpend: numericFields.avg_daily_spend,
-    });
+    let predictedFinalSpend;
+
+    try {
+      predictedFinalSpend = await predictFinalSpendML({
+        dayOfMonth: numericFields.day_of_month,
+        category,
+        spentSoFar: numericFields.spent_so_far,
+        transactions: numericFields.transactions,
+        avgDailySpend: numericFields.avg_daily_spend,
+      });
+    } catch (error) {
+      console.error(
+        "ML service failed in aiController, using local fallback:",
+        error.message
+      );
+
+      predictedFinalSpend = await predictFinalSpendLocal({
+        dayOfMonth: numericFields.day_of_month,
+        daysInMonth: daysInMonth,
+        category,
+        spentSoFar: numericFields.spent_so_far,
+        transactions: numericFields.transactions,
+        avgDailySpend: numericFields.avg_daily_spend,
+      });
+    }
 
     if (Number.isNaN(predictedFinalSpend)) {
       return res.status(502).json({
@@ -83,13 +102,27 @@ const predictSpending = async (req, res) => {
       });
     }
 
-    const overrun = predictedFinalSpend - numericFields.budget;
-    const overrunPercent =
-      overrun > 0
-        ? Math.round((overrun / numericFields.budget) * 100)
-        : 0;
+    const overrunPercent = calculateOverrunPercent({
+      spentSoFar: numericFields.spent_so_far,
+      predictedFinalSpend,
+      budget: numericFields.budget,
+    });
 
-    const statusDetails = getStatusDetails(category, overrunPercent);
+    console.log("AI predictSpending:", {
+      category,
+      spentSoFar: numericFields.spent_so_far,
+      budget: numericFields.budget,
+      predictedFinalSpend,
+      overrunPercent,
+    });
+
+    const statusDetails = getStatusDetails(
+      category,
+      overrunPercent,
+      numericFields.spent_so_far,
+      predictedFinalSpend,
+      numericFields.budget
+    );
 
     return res.status(200).json({
       success: true,
@@ -139,7 +172,16 @@ const getAiSummary = async (req, res) => {
       month
     );
 
-    const mostCriticalCategory = categorySummaries[0];
+    const mostCriticalCategory =
+      buildHomeAlertSummary(categorySummaries) || categorySummaries[0];
+
+    console.log("AI summary selected:", {
+      category: mostCriticalCategory.category,
+      status: mostCriticalCategory.status,
+      overrunPercent: mostCriticalCategory.overrunPercent,
+      priorityGroup: mostCriticalCategory.priorityGroup,
+      messageType: mostCriticalCategory.messageType,
+    });
 
     return res.status(200).json({
       success: true,

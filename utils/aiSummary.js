@@ -26,25 +26,206 @@ const normalizeAllocations = (allocations) => {
   return { ...allocations };
 };
 
-const getStatusDetails = (category, overrunPercent) => {
-  if (overrunPercent === 0) {
-    return {
-      status: "Safe",
-      message: `You are currently within your ${category} budget.`,
-    };
+const formatCurrencyNpr = (value) => {
+  const amount = Number.isFinite(Number(value)) ? Math.round(Number(value)) : 0;
+  return `Rs. ${amount.toLocaleString("en-IN")}`;
+};
+
+const calculateOverrunPercent = ({ spentSoFar, predictedFinalSpend, budget }) => {
+  if (!Number.isFinite(budget) || budget <= 0) return 0;
+
+  // Keep overrun aligned with forecast spend while preventing impossible under-spend scenarios.
+  const forecastSpend = Math.max(
+    Number(predictedFinalSpend) || 0,
+    Number(spentSoFar) || 0
+  );
+
+  if (forecastSpend > budget) {
+    return Math.round(((forecastSpend - budget) / budget) * 100);
   }
 
-  if (overrunPercent <= 10) {
+  return 0;
+};
+
+const getStatusDetails = (
+  category,
+  overrunPercent,
+  spentSoFar,
+  predictedFinalSpend,
+  budget
+) => {
+  const currentOverrunPercent =
+    Number.isFinite(budget) && budget > 0 && Number(spentSoFar) > Number(budget)
+      ? Math.round(((Number(spentSoFar) - Number(budget)) / Number(budget)) * 100)
+      : 0;
+
+  const effectiveOverrunPercent =
+    Number.isFinite(overrunPercent) && overrunPercent > 0
+      ? overrunPercent
+      : calculateOverrunPercent({ spentSoFar, predictedFinalSpend, budget });
+
+  if (spentSoFar > budget) {
+    const status = effectiveOverrunPercent > 20 ? "High Risk" : "Over Budget";
+    const projectedIncrease = Number(predictedFinalSpend) - Number(spentSoFar);
+    const projectedIncreasePercent =
+      Number(spentSoFar) > 0
+        ? (projectedIncrease / Number(spentSoFar)) * 100
+        : 0;
+
+    let message = `You have already exceeded your ${category} budget by ${currentOverrunPercent}%.`;
+    if (projectedIncreasePercent >= 3) {
+      message += ` At this pace, you may end the month ${effectiveOverrunPercent}% over budget, reaching around ${formatCurrencyNpr(
+        predictedFinalSpend
+      )}.`;
+    } else {
+      message += ` It is likely to remain around ${effectiveOverrunPercent}% over budget by month end.`;
+    }
+
+    return { status, message };
+  }
+
+  if (spentSoFar <= budget && predictedFinalSpend > budget) {
     return {
-      status: "Medium Risk",
-      message: `Based on your current spending pattern, you may exceed your ${category} budget by ${overrunPercent}% this month.`,
+      status: effectiveOverrunPercent > 20 ? "High Risk" : "Medium Risk",
+      message: `Based on your current spending pace, ${category} is likely to exceed its budget by ${effectiveOverrunPercent}% before month end.`,
     };
   }
 
   return {
-    status: "High Risk",
-    message: `High Risk: You may exceed your ${category} budget by ${overrunPercent}% before month end.`,
+    status: "Safe",
+    message: "Your current spending pace suggests this category is staying within budget.",
   };
+};
+
+const sortByRisk = (a, b) => {
+  if (b.overrunPercent !== a.overrunPercent) {
+    return b.overrunPercent - a.overrunPercent;
+  }
+
+  const bOverrunAmount =
+    Math.max(Number(b.predictedFinalSpend || 0), Number(b.spentSoFar || 0)) -
+    Number(b.budget || 0);
+  const aOverrunAmount =
+    Math.max(Number(a.predictedFinalSpend || 0), Number(a.spentSoFar || 0)) -
+    Number(a.budget || 0);
+  if (bOverrunAmount !== aOverrunAmount) {
+    return bOverrunAmount - aOverrunAmount;
+  }
+
+  return Number(b.spentSoFar || 0) - Number(a.spentSoFar || 0);
+};
+
+const buildHomeAlertItems = (predictions, options = {}) => {
+  const limit = Number(options.limit) > 0 ? Number(options.limit) : 3;
+  const nearThresholdRatio = Number(options.nearThresholdRatio) || 0.92;
+
+  if (!Array.isArray(predictions) || predictions.length === 0) {
+    return [];
+  }
+
+  const exceededCategories = predictions
+    .filter((item) => Number(item.spentSoFar) > Number(item.budget))
+    .sort(sortByRisk)
+    .map((item) => {
+      const details = getStatusDetails(
+        item.category,
+        item.overrunPercent,
+        item.spentSoFar,
+        item.predictedFinalSpend,
+        item.budget
+      );
+      const prefix = details.status === "High Risk" ? "High Risk: " : "";
+      return {
+        ...item,
+        status: details.status,
+        message: `${prefix}${details.message}`,
+        priorityGroup: "P1_OVER_BUDGET",
+      };
+    });
+
+  const predictedToExceed = predictions
+    .filter(
+      (item) =>
+        Number(item.spentSoFar) <= Number(item.budget) &&
+        Number(item.predictedFinalSpend) > Number(item.budget)
+    )
+    .sort(sortByRisk)
+    .map((item) => {
+      const details = getStatusDetails(
+        item.category,
+        item.overrunPercent,
+        item.spentSoFar,
+        item.predictedFinalSpend,
+        item.budget
+      );
+      return {
+        ...item,
+        status: details.status,
+        message: details.message,
+        priorityGroup: "P2_PREDICTED_OVER",
+      };
+    });
+
+  const nearLimitCategories = predictions
+    .filter((item) => {
+      const budget = Number(item.budget) || 0;
+      const predicted = Number(item.predictedFinalSpend) || 0;
+      const spent = Number(item.spentSoFar) || 0;
+
+      if (budget <= 0) return false;
+      if (spent > budget) return false;
+      if (predicted > budget) return false;
+
+      const ratio = predicted / budget;
+      return ratio >= nearThresholdRatio;
+    })
+    .sort((a, b) => {
+      const bRatio = Number(b.predictedFinalSpend || 0) / Math.max(Number(b.budget || 0), 1);
+      const aRatio = Number(a.predictedFinalSpend || 0) / Math.max(Number(a.budget || 0), 1);
+      if (bRatio !== aRatio) return bRatio - aRatio;
+      return Number(b.spendingProgress || 0) - Number(a.spendingProgress || 0);
+    })
+    .map((item) => ({
+      ...item,
+      status: item.status || "Watch",
+      message: `${item.category} is approaching its budget limit based on your current spending pace.`,
+      priorityGroup: "P3_NEAR_LIMIT",
+    }));
+
+  const ranked = [];
+  const seen = new Set();
+
+  [exceededCategories, predictedToExceed, nearLimitCategories].forEach((group) => {
+    group.forEach((item) => {
+      if (ranked.length >= limit) return;
+      if (seen.has(item.category)) return;
+      seen.add(item.category);
+      ranked.push(item);
+    });
+  });
+
+  if (ranked.length > 0) {
+    return ranked;
+  }
+
+  return [
+    {
+      category: "Overall",
+      budget: 0,
+      spentSoFar: 0,
+      predictedFinalSpend: 0,
+      overrunPercent: 0,
+      status: "Safe",
+      message:
+        "No budget overrun is predicted right now. Your current spending pace is within budget.",
+      priorityGroup: "SAFE_SUMMARY",
+    },
+  ];
+};
+
+const buildHomeAlertSummary = (predictions) => {
+  const items = buildHomeAlertItems(predictions, { limit: 1 });
+  return items[0] || null;
 };
 
 const buildCategoryInputList = ({ budgetDoc, expenses, dayOfMonth }) => {
@@ -92,6 +273,9 @@ const buildCategoryInputList = ({ budgetDoc, expenses, dayOfMonth }) => {
 module.exports = {
   getCurrentMonth,
   getMonthDateRange,
+  calculateOverrunPercent,
   getStatusDetails,
+  buildHomeAlertItems,
+  buildHomeAlertSummary,
   buildCategoryInputList,
 };

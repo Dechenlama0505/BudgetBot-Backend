@@ -2,6 +2,7 @@ const Expense = require("../models/Expense");
 const Budget = require("../models/Budget");
 const User = require("../models/User");
 const { buildPredictionsForMonth } = require("../utils/budgetPredictions");
+const { buildHomeAlertItems, buildHomeAlertSummary } = require("../utils/aiSummary");
 
 const getCurrentMonth = () => {
   const now = new Date();
@@ -173,10 +174,22 @@ const getBudgetPredictions = async (req, res) => {
     }
 
     const predictions = await buildPredictionsForMonth(req.user._id, month);
+    const homeAlerts = buildHomeAlertItems(predictions, { limit: 3 });
+    const homeAlert = homeAlerts[0] || buildHomeAlertSummary(predictions);
+
+    if (homeAlert || homeAlerts.length > 0) {
+      console.log("Home AI alert selected:", {
+        count: homeAlerts.length,
+        topCategory: homeAlert?.category,
+        topPriorityGroup: homeAlert?.priorityGroup,
+      });
+    }
 
     return res.status(200).json({
       success: true,
       data: predictions,
+      homeAlerts,
+      homeAlert,
       budgetRequired: false,
     });
   } catch (error) {

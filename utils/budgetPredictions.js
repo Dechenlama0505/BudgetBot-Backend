@@ -3,9 +3,11 @@ const Expense = require("../models/Expense");
 const {
   getCurrentMonth,
   getMonthDateRange,
+  calculateOverrunPercent,
   getStatusDetails,
   buildCategoryInputList,
 } = require("./aiSummary");
+const { predictFinalSpendML } = require("./mlPredictionService");
 const { predictFinalSpendLocal } = require("./localBudgetPredictor");
 
 function daysInMonthFromYyyyMm(month) {
@@ -30,22 +32,44 @@ async function computeCategoryPrediction(item, month, currentMonthStr) {
   } else if (item.spentSoFar <= 0 && item.transactions === 0) {
     predictedFinalSpend = 0;
   } else {
-    // TODO: Replace with local trained ML model prediction service.
-    predictedFinalSpend = await predictFinalSpendLocal({
-      dayOfMonth: dom,
-      daysInMonth: dim,
-      category: item.category,
-      spentSoFar: item.spentSoFar,
-      transactions: item.transactions,
-      avgDailySpend: item.avgDailySpend,
-    });
+    try {
+      predictedFinalSpend = await predictFinalSpendML({
+        dayOfMonth: dom,
+        category: item.category,
+        spentSoFar: item.spentSoFar,
+        transactions: item.transactions,
+        avgDailySpend: item.avgDailySpend,
+      });
+    } catch (error) {
+      console.error(
+        "ML service failed in budgetPredictions, using local fallback:",
+        error.message
+      );
+
+      predictedFinalSpend = await predictFinalSpendLocal({
+        dayOfMonth: dom,
+        daysInMonth: dim,
+        category: item.category,
+        spentSoFar: item.spentSoFar,
+        transactions: item.transactions,
+        avgDailySpend: item.avgDailySpend,
+      });
+    }
   }
 
   const roundedPrediction = Number(Number(predictedFinalSpend).toFixed(2));
-  const overrun = roundedPrediction - item.budget;
-  const overrunPercent =
-    overrun > 0 ? Math.round((overrun / item.budget) * 100) : 0;
-  const statusDetails = getStatusDetails(item.category, overrunPercent);
+  const overrunPercent = calculateOverrunPercent({
+    spentSoFar: item.spentSoFar,
+    predictedFinalSpend: roundedPrediction,
+    budget: item.budget,
+  });
+  const statusDetails = getStatusDetails(
+    item.category,
+    overrunPercent,
+    item.spentSoFar,
+    roundedPrediction,
+    item.budget
+  );
 
   return {
     category: item.category,
