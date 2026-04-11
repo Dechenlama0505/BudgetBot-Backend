@@ -7,15 +7,31 @@ async function predictFinalSpendML({
   transactions,
   avgDailySpend,
 }) {
-  const response = await axios.post("http://127.0.0.1:5002/predict", {
-    day_of_month: dayOfMonth,
-    category,
-    spent_so_far: spentSoFar,
-    transactions,
-    avg_daily_spend: avgDailySpend,
-  });
+  const baseUrl = process.env.AI_SERVICE_URL;
+  if (!baseUrl) {
+    throw new Error("AI_SERVICE_URL is not configured");
+  }
 
-  return response.data.predictedFinalSpend;
+  const response = await axios.post(
+    `${baseUrl.replace(/\/$/, "")}/predict`,
+    {
+      day_of_month: dayOfMonth,
+      category,
+      spent_so_far: spentSoFar,
+      transactions,
+      avg_daily_spend: avgDailySpend,
+    },
+    {
+      timeout: 10000,
+    }
+  );
+
+  const predictedFinalSpend = Number(response?.data?.predictedFinalSpend);
+  if (!Number.isFinite(predictedFinalSpend)) {
+    throw new Error("ML service returned invalid predictedFinalSpend");
+  }
+
+  return predictedFinalSpend;
 }
 
 module.exports = {

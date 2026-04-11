@@ -40,6 +40,11 @@ async function computeCategoryPrediction(item, month, currentMonthStr) {
         transactions: item.transactions,
         avgDailySpend: item.avgDailySpend,
       });
+      console.log("Prediction path: ML service", {
+        category: item.category,
+        dayOfMonth: dom,
+        predictedFinalSpend,
+      });
     } catch (error) {
       console.error(
         "ML service failed in budgetPredictions, using local fallback:",
@@ -54,6 +59,11 @@ async function computeCategoryPrediction(item, month, currentMonthStr) {
         transactions: item.transactions,
         avgDailySpend: item.avgDailySpend,
       });
+      console.log("Prediction path: local fallback", {
+        category: item.category,
+        dayOfMonth: dom,
+        predictedFinalSpend,
+      });
     }
   }
 
@@ -62,6 +72,13 @@ async function computeCategoryPrediction(item, month, currentMonthStr) {
     spentSoFar: item.spentSoFar,
     predictedFinalSpend: roundedPrediction,
     budget: item.budget,
+  });
+  console.log("Prediction normalized", {
+    category: item.category,
+    budget: item.budget,
+    spentSoFar: item.spentSoFar,
+    predictedFinalSpend: roundedPrediction,
+    overrunPercent,
   });
   const statusDetails = getStatusDetails(
     item.category,
