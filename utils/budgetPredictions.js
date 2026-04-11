@@ -47,7 +47,7 @@ async function computeCategoryPrediction(item, month, currentMonthStr) {
       });
     } catch (error) {
       console.error(
-        "ML service failed in budgetPredictions, using local fallback:",
+        "ML service failed in budgetPredictions after retries, using local fallback:",
         error.message
       );
 

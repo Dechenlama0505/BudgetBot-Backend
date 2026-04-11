@@ -81,7 +81,7 @@ const predictSpending = async (req, res) => {
       });
     } catch (error) {
       console.error(
-        "ML service failed in aiController, using local fallback:",
+        "ML service failed in aiController after retries, using local fallback:",
         error.message
       );
 
