@@ -37,14 +37,14 @@ const userSchema = new mongoose.Schema(
       select: false,
     },
 
-    // 🔥 NEW FIELD: ROLE
+    // NEW FIELD: ROLE
     role: {
       type: String,
       enum: ["user", "admin", "superadmin"],
       default: "user",
     },
 
-    // 🔥 NEW FIELD: STATUS
+    // NEW FIELD: STATUS
     status: {
       type: String,
       enum: ["active", "inactive", "pending"],

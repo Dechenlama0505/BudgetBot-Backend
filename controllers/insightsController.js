@@ -172,7 +172,7 @@ const getBudgetPredictions = async (req, res) => {
           "Set your monthly budget on the home screen to unlock AI spending forecasts and alerts.",
       });
     }
-
+    
     const predictions = await buildPredictionsForMonth(req.user._id, month);
     const homeAlerts = buildHomeAlertItems(predictions, { limit: 3 });
     const homeAlert = homeAlerts[0] || buildHomeAlertSummary(predictions);

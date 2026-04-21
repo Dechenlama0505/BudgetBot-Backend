@@ -273,13 +273,22 @@ const createMember = async (req, res) => {
 // @access  Private/Admin or Superadmin
 const getDashboardStats = async (req, res) => {
   try {
-    const [totalUsers, activeUsers, pendingUsers, inactiveUsers] =
+    const [
+      totalUsers,
+      activeUsers,
+      pendingUsers,
+      inactiveUsers,
+      totalAdmins,
+    ] =
       await Promise.all([
         User.countDocuments({ role: "user" }),
         User.countDocuments({ role: "user", status: "active" }),
         User.countDocuments({ role: "user", status: "pending" }),
         User.countDocuments({ role: "user", status: "inactive" }),
+        User.countDocuments({ role: "admin" }),
       ]);
+
+    console.log("Admin count:", totalAdmins);
 
     res.status(200).json({
       success: true,
@@ -287,6 +296,10 @@ const getDashboardStats = async (req, res) => {
       activeUsers,
       pendingUsers,
       inactiveUsers,
+      totalAdmins,
+      totalMembers: totalUsers,
+      activeMembers: activeUsers,
+      inactiveMembers: inactiveUsers,
     });
   } catch (error) {
     console.error("Get admin dashboard stats error:", error);
